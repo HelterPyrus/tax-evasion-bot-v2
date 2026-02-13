@@ -79,7 +79,22 @@ client.on("messageCreate", async (message) => {
           "- When everything is done and ready, run **!finishmulti** to assign roles and log picks."
         );
       }
-      return pickraidmulti(message, args);
+      return pickraidmulti(message, args, 5);
+
+    case "!pickraidmultismall":
+      if (!args.length) {
+        return sendTempReply(
+          message,
+          "**Usage:**\n" +
+          "`!pickraidmulti [\"Raid Name - DD/MM/YYYY\"] @r1user1 @r1user2 ... | @r2user1 @r2user2 ... | @r3user1 @r3user2 ...`\n\n" +
+          "**Notes:**\n" +
+          "- Raid name/date is optional (wrap in quotes). Defaults to `Raid #1`, `Raid #2`, etc., if omitted.\n" +
+          "- Separate multiple raid groups with `|`.\n" +
+          "- Mentions must be valid Core Raiders who are not Officers/Moderators.\n" +
+          "- When everything is done and ready, run **!finishmulti** to assign roles and log picks."
+        );
+      }
+      return pickraidmulti(message, args, 3);
 
     case "!group":
       if (!args.length) {

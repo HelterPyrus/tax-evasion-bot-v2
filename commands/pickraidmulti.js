@@ -19,7 +19,7 @@ const sendTempReply = (message, content, timeout = 20000) => {
 
 /* ---------------------------- MAIN COMMAND ---------------------------- */
 
-module.exports = async function pickraidmulti(message, args) {
+module.exports = async function pickraidmulti(message, args, pickCount = PICKS) {
   if (!isOfficerOrModerator(message.member, message.guild)) {
     return sendTempReply(message, "This command is restricted to Officers and Moderators.");
   }
@@ -86,7 +86,7 @@ module.exports = async function pickraidmulti(message, args) {
 
     /* ----------------------------- STATE ------------------------------ */
 
-    const maxCount = Math.min(PICKS, eligible.length);
+    const maxCount = Math.min(pickCount, eligible.length);
     let provisional = pick(eligible, maxCount);
     let pool = eligible.filter(m => !provisional.includes(m));
 
@@ -129,7 +129,7 @@ module.exports = async function pickraidmulti(message, args) {
       }
 
       return {
-        title: `🎲 Loot Council – ${name}`,
+        title: `🎲 Loot Council (${maxCount} Core Raiders) – ${name}`,
         color: isReady ? 0x2ecc71 : 0xf1c40f,
         description: description.join("\n")
       };
