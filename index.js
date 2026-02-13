@@ -84,7 +84,6 @@ client.on("messageCreate", async (message) => {
     case "!pickraidmultismall":
       if (!args.length) {
         return sendTempReply(
-          message,
           "**Usage:**\n" +
           "`!pickraidmulti [\"Raid Name - DD/MM/YYYY\"] @r1user1 @r1user2 ... | @r2user1 @r2user2 ... | @r3user1 @r3user2 ...`\n\n" +
           "**Notes:**\n" +
