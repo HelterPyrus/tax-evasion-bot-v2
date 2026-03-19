@@ -47,9 +47,9 @@ client.on("messageCreate", async (message) => {
   const sendTempReply = async (content, timeout = 15000) => {
     try {
       const replyMsg = await message.reply(content);
-      setTimeout(() => replyMsg.delete().catch(() => { }), timeout);
-      setTimeout(() => message.delete().catch(() => { }), 50); // delete command immediately
-    } catch { }
+      setTimeout(() => replyMsg.delete().catch(() => {}), timeout);
+      setTimeout(() => message.delete().catch(() => {}), 50);
+    } catch {}
   };
 
   switch (command) {
@@ -61,7 +61,8 @@ client.on("messageCreate", async (message) => {
           "**Notes:**\n" +
           "- Raid name/date is optional (wrap in quotes). Defaults to `Raid #1` if omitted.\n" +
           "- Event ID must be valid on Raid-Helper.\n" +
-          "- Only Core Raiders who are not Officers/Moderators are eligible.\n" +
+          "- Only Core Raiders are eligible.\n" +
+          "- Guild Master is always included automatically.\n" +
           "- When everything is done and ready, run **!finish** to assign roles and log picks."
         );
       }
@@ -75,7 +76,8 @@ client.on("messageCreate", async (message) => {
           "**Notes:**\n" +
           "- Raid name/date is optional (wrap in quotes). Defaults to `Raid #1`, `Raid #2`, etc., if omitted.\n" +
           "- Separate multiple raid groups with `|`.\n" +
-          "- Mentions must be valid Core Raiders who are not Officers/Moderators.\n" +
+          "- Mentions must be valid Core Raiders.\n" +
+          "- Guild Master is always included automatically.\n" +
           "- When everything is done and ready, run **!finishmulti** to assign roles and log picks."
         );
       }
@@ -89,7 +91,8 @@ client.on("messageCreate", async (message) => {
           "**Notes:**\n" +
           "- Raid name/date is optional (wrap in quotes). Defaults to `Raid #1`, `Raid #2`, etc., if omitted.\n" +
           "- Separate multiple raid groups with `|`.\n" +
-          "- Mentions must be valid Core Raiders who are not Officers/Moderators.\n" +
+          "- Mentions must be valid Core Raiders.\n" +
+          "- Guild Master is always included automatically.\n" +
           "- When everything is done and ready, run **!finishmulti** to assign roles and log picks."
         );
       }
@@ -127,7 +130,6 @@ client.on("messageCreate", async (message) => {
       return cleanraid(message);
   }
 });
-
 
 client.on("error", console.error);
 

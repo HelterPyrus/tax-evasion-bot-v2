@@ -5,7 +5,7 @@ const {
   ROLES
 } = require("../config/constants");
 
-const { isOfficerOrModerator } = require("../services/permissionService");
+const { canManageCouncil } = require("../services/permissionService");
 const { pick } = require("../services/pickerService");
 
 // Active multi-raid sessions per channel
@@ -20,8 +20,9 @@ const sendTempReply = (message, content, timeout = 20000) => {
 /* ---------------------------- MAIN COMMAND ---------------------------- */
 
 module.exports = async function pickraidmulti(message, args, pickCount = PICKS) {
-  if (!isOfficerOrModerator(message.member, message.guild)) {
-    return sendTempReply(message, "This command is restricted to Officers and Moderators.");
+
+  if (!canManageCouncil(message.member, message.guild)) {
+    return sendTempReply(message, "This command is restricted to Guild Masters and Officers.");
   }
 
   if (!args.length) {
@@ -52,7 +53,7 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
 
   const coreRole = message.guild.roles.cache.find(r => r.name === ROLES.CORE);
   const officerRole = message.guild.roles.cache.find(r => r.name === ROLES.OFFICER);
-  const moderatorRole = message.guild.roles.cache.find(r => r.name === ROLES.MODERATOR);
+  const guildMasterRole = message.guild.roles.cache.find(r => r.name === ROLES.GUILD_MASTER);
 
   const raidSessions = [];
 
@@ -62,33 +63,51 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
       .map(m => message.guild.members.cache.get(m.replace(/\D/g, "")))
       .filter(Boolean);
 
-    const eligible = [];
+    // ---------------- Guild Master + Core detection ----------------
+    let guildMasters = [];
+    const eligibleCore = [];
     const ineligible = [];
 
     for (const m of members) {
-      if (!m.roles.cache.has(coreRole.id))
-        ineligible.push(`<@${m.id}> (not Core Raider)`);
-      else if (officerRole && m.roles.cache.has(officerRole.id))
-        ineligible.push(`<@${m.id}> (Officer)`);
-      else if (moderatorRole && m.roles.cache.has(moderatorRole.id))
-        ineligible.push(`<@${m.id}> (Moderator)`);
-      else
-        eligible.push(m);
+      if (guildMasterRole && m.roles.cache.has(guildMasterRole.id)) {
+        guildMasters.push(m);
+        continue;
+      }
+      if ((coreRole && m.roles.cache.has(coreRole.id)) ||
+          (officerRole && m.roles.cache.has(officerRole.id))) {
+        eligibleCore.push(m);
+        continue;
+      }
+      ineligible.push(`<@${m.id}> (not Core)`);
     }
 
-    if (!eligible.length) {
-      await sendTempReply(
-        message,
-        `⚠️ ${raidName || `Raid #${i + 1}`} has no eligible Core members. Skipping.`
-      );
+    const name = raidName || `Raid #${i + 1}`;
+
+    // Pick 1 provisional GM if available
+    let guildMaster = null;
+    if (guildMasters.length) {
+      guildMaster = pick(guildMasters, 1)[0];
+      guildMasters = guildMasters.filter(m => m.id !== guildMaster.id); // remaining GMs for fallback
+    }
+
+    if (!guildMaster) {
+      await sendTempReply(message, `⚠️ ${name} has no Guild Master available.`);
       continue;
     }
 
-    /* ----------------------------- STATE ------------------------------ */
+    if (!eligibleCore.length) {
+      await sendTempReply(message, `⚠️ ${name} has no eligible Core members.`);
+      continue;
+    }
 
-    const maxCount = Math.min(pickCount, eligible.length);
-    let provisional = pick(eligible, maxCount);
-    let pool = eligible.filter(m => !provisional.includes(m));
+    // ----------------------------- STATE ------------------------------
+    const coreSlots = Math.min(pickCount - 1, eligibleCore.length);
+    const corePicks = pick(eligibleCore, coreSlots);
+
+    let provisional = [guildMaster, ...corePicks];
+    let pool = eligibleCore.filter(m => !corePicks.includes(m));
+
+    const maxCount = provisional.length;
 
     const confirmed = new Set();
     const declined = new Set();
@@ -96,7 +115,9 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
     const lastReaction = new Map();
     const replacementMessages = [];
 
-    const name = raidName || `Raid #${i + 1}`;
+    const slotType = new Map();
+    slotType.set(guildMaster.id, "gm");
+    corePicks.forEach(m => slotType.set(m.id, "core"));
 
     const renderEmbed = () => {
       const isReady = confirmed.size === maxCount;
@@ -129,14 +150,13 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
       }
 
       return {
-        title: `🎲 Loot Council (${maxCount} Core Raiders) – ${name}`,
+        title: `🎲 Loot Council (Guild Master + ${coreSlots} Core) – ${name}`,
         color: isReady ? 0x2ecc71 : 0xf1c40f,
         description: description.join("\n")
       };
     };
 
-    /* --------------------------- EMBED --------------------------- */
-
+    // --------------------------- EMBED ---------------------------
     const embedMessage = await message.channel.send({
       embeds: [renderEmbed()]
     });
@@ -145,6 +165,7 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
     await embedMessage.react("❌");
 
     const collector = embedMessage.createReactionCollector({});
+
     const getAllowedIds = () =>
       provisional.map(m => m.id).concat([...confirmed]);
 
@@ -153,23 +174,21 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
       if (!member) return;
 
       const allowedIds = getAllowedIds();
-      if (!["✅", "❌"].includes(reaction.emoji.name) ||
-        !allowedIds.includes(user.id)) {
-        try { await reaction.users.remove(user.id); } catch { }
+      if (!["✅", "❌"].includes(reaction.emoji.name) || !allowedIds.includes(user.id)) {
+        try { await reaction.users.remove(user.id); } catch {}
         return;
       }
 
       if (declined.has(member.id)) {
-        try { await reaction.users.remove(user.id); } catch { }
+        try { await reaction.users.remove(user.id); } catch {}
         return;
       }
 
       const prev = lastReaction.get(user.id);
       if (prev && prev !== reaction.emoji.name) {
         try {
-          await embedMessage.reactions.cache
-            .get(prev)?.users.remove(user.id);
-        } catch { }
+          await embedMessage.reactions.cache.get(prev)?.users.remove(user.id);
+        } catch {}
       }
 
       lastReaction.set(user.id, reaction.emoji.name);
@@ -182,19 +201,45 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
         confirmed.delete(member.id);
         declined.add(member.id);
 
-        const replacement = pool.shift();
-        if (replacement) {
-          replacements.set(replacement.id, member.id);
-          provisional = provisional.map(m =>
-            m.id === member.id ? replacement : m
-          );
+        const type = slotType.get(member.id);
+        let replacement = null;
 
-          try {
-            const msg = await message.channel.send(
-              `❌ <@${member.id}> declined — summoning <@${replacement.id}> as **Provisional**.`
+        if (type === "gm") {
+          // fallback to next GM in line
+          replacement = guildMasters.shift();
+          if (replacement) {
+            replacements.set(replacement.id, member.id);
+            provisional = provisional.map(m =>
+              m.id === member.id ? replacement : m
             );
-            replacementMessages.push(msg);
-          } catch { }
+            slotType.set(replacement.id, "gm");
+            guildMaster = replacement;
+
+            try {
+              const msg = await message.channel.send(
+                `❌ <@${member.id}> declined — fallback Guild Master is <@${replacement.id}>.`
+              );
+              replacementMessages.push(msg);
+            } catch {}
+          }
+        }
+
+        if (!replacement && type === "core") {
+          replacement = pool.shift();
+          if (replacement) {
+            replacements.set(replacement.id, member.id);
+            provisional = provisional.map(m =>
+              m.id === member.id ? replacement : m
+            );
+            slotType.set(replacement.id, "core");
+
+            try {
+              const msg = await message.channel.send(
+                `❌ <@${member.id}> declined — summoning <@${replacement.id}> as **Provisional**.`
+              );
+              replacementMessages.push(msg);
+            } catch {}
+          }
         }
       }
 
@@ -223,8 +268,8 @@ module.exports = async function pickraidmulti(message, args, pickCount = PICKS) 
 /* ---------------------------- FINISH ---------------------------- */
 
 module.exports.finish = async function finishPickraidMulti(message) {
-  if (!isOfficerOrModerator(message.member, message.guild)) {
-    return sendTempReply(message, "This command is restricted to Officers and Moderators.");
+  if (!canManageCouncil(message.member, message.guild)) {
+    return sendTempReply(message, "This command is restricted to Guild Masters and Officers.");
   }
 
   const sessions = activePickraidMultiSessions.get(message.channel.id);
@@ -248,14 +293,12 @@ module.exports.finish = async function finishPickraidMulti(message) {
 
     collector.stop();
 
-    try { await embedMessage.delete(); } catch { }
+    try { await embedMessage.delete(); } catch {}
     for (const msg of replacementMessages) {
-      try { await msg.delete(); } catch { }
+      try { await msg.delete(); } catch {}
     }
 
-    const finalRoster = [...confirmed]
-      .map(id => `- <@${id}>`)
-      .join("\n");
+    const finalRoster = [...confirmed].map(id => `- <@${id}>`).join("\n");
 
     await message.channel.send(
       `🎲 **Final Loot Council – ${name} (Confirmed):**\n${finalRoster}`
@@ -284,9 +327,7 @@ module.exports.finish = async function finishPickraidMulti(message) {
             {
               name: "Replacements",
               value: replacements.size
-                ? [...replacements.entries()]
-                  .map(([n, o]) => `- <@${o}> ➜ <@${n}>`)
-                  .join("\n")
+                ? [...replacements.entries()].map(([n, o]) => `- <@${o}> ➜ <@${n}>`).join("\n")
                 : "None"
             },
             { name: "Finished By", value: `<@${message.author.id}>`, inline: true },
@@ -305,16 +346,15 @@ module.exports.finish = async function finishPickraidMulti(message) {
 /* -------------------------- CLEAN RAID --------------------------- */
 
 module.exports.cleanraid = async function cleanRaidMulti(message) {
-  if (!isOfficerOrModerator(message.member, message.guild)) {
-    return sendTempReply(message, "This command is restricted to Officers and Moderators.");
+  if (!canManageCouncil(message.member, message.guild)) {
+    return sendTempReply(message, "This command is restricted to Guild Masters and Officers.");
   }
 
   const role = message.guild.roles.cache.get(LOOT_COUNCIL_ROLE_ID);
+
   if (!role) return sendTempReply(message, "Loot Council role not found.");
 
-  if (!role.members.size) {
-    return sendTempReply(message, "No members currently have the Loot Council role.");
-  }
+  if (!role.members.size) return sendTempReply(message, "No members currently have the Loot Council role.");
 
   for (const [, member] of role.members) {
     await member.roles.remove(role);

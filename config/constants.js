@@ -3,9 +3,10 @@ module.exports = {
   AUDIT_CHANNEL_ID: "1457766042926583922",
   LOOT_COUNCIL_ROLE_ID: "1457766098807296062",
   PICKS: 5,
+
   ROLES: {
+    GUILD_MASTER: "Guild Master",
     OFFICER: "Officer",
-    MODERATOR: "Moderator",
     CORE: "Core"
   }
 };
