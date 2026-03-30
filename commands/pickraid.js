@@ -23,12 +23,24 @@ const EXCLUDED_CLASSES = new Set([
 
 const sendTempReply = (message, content, timeout = 20000) => {
   message.reply(content)
-    .then(msg => setTimeout(() => msg.delete().catch(() => {}), timeout));
+    .then(msg => setTimeout(() => msg.delete().catch(() => { }), timeout));
 };
 
 async function fetchRaidMembers(raidId, guild) {
-  const url = `https://raid-helper.xyz/api/v4/events/${raidId}`;
-  const { data } = await axios.get(url);
+  const { data } = await axios.get(
+  `https://raid-helper.xyz/api/v4/events/${raidId}`,
+  {
+    timeout: 20000,
+    headers: {
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "en-US,en;q=0.9",
+      "Accept-Encoding": "gzip, deflate, br",
+      "Connection": "keep-alive"
+    },
+    decompress: true
+  }
+);
 
   if (!data || !Array.isArray(data.signUps)) {
     throw new Error("Invalid Raid-Helper response");
@@ -115,10 +127,14 @@ module.exports = async function pickraid(message, args) {
     }
 
   } catch (err) {
-    return sendTempReply(
-      message,
-      `Failed to fetch Raid-Helper event. ${err.message}`
-    );
+    console.error("FULL ERROR:", {
+      message: err.message,
+      code: err.code,
+      status: err.response?.status,
+      data: err.response?.data
+    });
+
+    throw err;
   }
 
   if (!guildMaster) {
@@ -230,12 +246,12 @@ module.exports = async function pickraid(message, args) {
       !["✅", "❌"].includes(reaction.emoji.name) ||
       !allowedIds.includes(user.id)
     ) {
-      try { await reaction.users.remove(user.id); } catch {}
+      try { await reaction.users.remove(user.id); } catch { }
       return;
     }
 
     if (declined.has(member.id)) {
-      try { await reaction.users.remove(user.id); } catch {}
+      try { await reaction.users.remove(user.id); } catch { }
       return;
     }
 
@@ -245,7 +261,7 @@ module.exports = async function pickraid(message, args) {
       try {
         await embedMessage.reactions.cache
           .get(prev)?.users.remove(user.id);
-      } catch {}
+      } catch { }
     }
 
     lastReaction.set(user.id, reaction.emoji.name);
@@ -282,7 +298,7 @@ module.exports = async function pickraid(message, args) {
             `❌ <@${member.id}> declined — summoning <@${replacement.id}> as **Provisional**.`
           );
           replacementMessages.push(msg);
-        } catch {}
+        } catch { }
       }
     }
 
@@ -335,10 +351,10 @@ module.exports.finish = async function finishPickraid(message) {
 
   session.collector.stop();
 
-  try { await session.message.delete(); } catch {}
+  try { await session.message.delete(); } catch { }
 
   for (const msg of session.replacementMessages) {
-    try { await msg.delete(); } catch {}
+    try { await msg.delete(); } catch { }
   }
 
   const finalRoster = [...confirmed]
