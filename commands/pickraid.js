@@ -27,7 +27,7 @@ const sendTempReply = (message, content, timeout = 20000) => {
 };
 
 async function fetchRaidMembers(raidId, guild) {
-  const url = `https://raid-helper.dev/api/v2/events/${raidId}`;
+  const url = `https://raid-helper.xyz/api/v4/events/${raidId}`;
   const { data } = await axios.get(url);
 
   if (!data || !Array.isArray(data.signUps)) {
