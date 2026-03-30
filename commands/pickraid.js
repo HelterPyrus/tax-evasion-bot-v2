@@ -28,19 +28,19 @@ const sendTempReply = (message, content, timeout = 20000) => {
 
 async function fetchRaidMembers(raidId, guild) {
   const { data } = await axios.get(
-  `https://raid-helper.xyz/api/v4/events/${raidId}`,
-  {
-    timeout: 20000,
-    headers: {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
-      "Accept": "application/json, text/plain, */*",
-      "Accept-Language": "en-US,en;q=0.9",
-      "Accept-Encoding": "gzip, deflate, br",
-      "Connection": "keep-alive"
-    },
-    decompress: true
-  }
-);
+    `https://raid-helper.xyz/api/v4/events/${raidId}`,
+    {
+      timeout: 20000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive"
+      },
+      decompress: true
+    }
+  );
 
   if (!data || !Array.isArray(data.signUps)) {
     throw new Error("Invalid Raid-Helper response");
@@ -127,14 +127,25 @@ module.exports = async function pickraid(message, args) {
     }
 
   } catch (err) {
-    console.error("FULL ERROR:", {
-      message: err.message,
-      code: err.code,
-      status: err.response?.status,
-      data: err.response?.data
-    });
+    // Build a full error string
+    const errorDetails = [
+      `**Message:** ${err.message}`,
+      `**Code:** ${err.code || "N/A"}`,
+      `**Status:** ${err.response?.status || "N/A"}`,
+      `**Data:** ${JSON.stringify(err.response?.data || err, null, 2)}`
+    ].join("\n");
 
-    throw err;
+    // Send as temporary reply
+    sendTempReply(
+      message,
+      `❌ Failed to fetch Raid-Helper event:\n${errorDetails}`,
+      30000 // optional: show for 30 seconds instead of default 20
+    );
+
+    // Optionally log in console too
+    console.error("FULL ERROR:", err);
+
+    return; // stop further execution
   }
 
   if (!guildMaster) {
